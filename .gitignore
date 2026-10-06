@@ -1,0 +1,3 @@
+# Never commit raw IBKR statement exports — they contain name/address/account number
+*.csv
+activity.csv
