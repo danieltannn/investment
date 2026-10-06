@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Investment Tracker</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page-plane:     #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --good:           #006300;
+    --bad:            #d03b3b;
+    --series-1: #2a78d6; /* blue */
+    --series-2: #eb6834; /* orange */
+    --series-3: #1baf7a; /* aqua */
+    --series-4: #eda100; /* yellow */
+    --series-5: #e87ba4; /* magenta */
+    --series-6: #008300; /* green */
+    --series-7: #4a3aa7; /* violet */
+    --series-8: #e34948; /* red */
+    --div-pos: #2a78d6;  /* diverging: blue = inflow/gain */
+    --div-neg: #e34948;  /* diverging: red = outflow/loss */
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page-plane:     #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --good:           #0ca30c;
+      --bad:            #e66767;
+      --series-1: #3987e5;
+      --series-2: #d95926;
+      --series-3: #199e70;
+      --series-4: #c98500;
+      --series-5: #d55181;
+      --series-6: #008300;
+      --series-7: #9085e9;
+      --series-8: #e66767;
+      --div-pos: #3987e5;
+      --div-neg: #e66767;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--page-plane);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 20px 16px 56px; }
+  header.top { margin-bottom: 20px; }
+  header.top h1 { font-size: 22px; margin: 0 0 4px; }
+  header.top .meta { color: var(--text-muted); font-size: 13px; }
+  nav.tabs {
+    display: flex; gap: 4px; margin: 20px 0 18px; border-bottom: 1px solid var(--gridline);
+    overflow-x: auto; -ms-overflow-style: none; scrollbar-width: none;
+  }
+  nav.tabs::-webkit-scrollbar { display: none; }
+  nav.tabs button {
+    appearance: none; border: none; background: none; cursor: pointer;
+    color: var(--text-secondary); font: inherit; font-size: 14px; font-weight: 500;
+    padding: 10px 14px; border-bottom: 2px solid transparent; white-space: nowrap;
+  }
+  nav.tabs button.active { color: var(--text-primary); border-bottom-color: var(--series-1); }
+  section.panel { display: none; }
+  section.panel.active { display: block; }
+
+  .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 22px; }
+  .kpi {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .kpi .label { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+  .kpi .value { font-size: 22px; font-weight: 600; }
+  .kpi .sub { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+  .kpi .value.good { color: var(--good); }
+  .kpi .value.bad { color: var(--bad); }
+
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+    padding: 18px; margin-bottom: 20px;
+  }
+  .card h2 { font-size: 15px; margin: 0 0 2px; }
+  .card .card-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; }
+
+  /* Allocation stacked bar */
+  .alloc-bar { display: flex; width: 100%; height: 28px; border-radius: 6px; overflow: hidden; }
+  .alloc-seg { height: 100%; position: relative; }
+  .alloc-legend { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-top: 14px; font-size: 13px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); cursor: default; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+
+  /* Diverging bar (NAV bridge) */
+  .bridge-row { display: grid; grid-template-columns: 150px 1fr 90px; align-items: center; gap: 10px; margin: 10px 0; font-size: 13px; }
+  .bridge-label { color: var(--text-secondary); }
+  .bridge-track { position: relative; height: 18px; background: var(--gridline); border-radius: 4px; }
+  .bridge-mid { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--baseline); left: 50%; }
+  .bridge-fill { position: absolute; top: 0; height: 100%; border-radius: 4px; }
+  .bridge-value { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+
+  /* Line chart */
+  svg.chart { width: 100%; height: auto; overflow: visible; }
+  .chart-tooltip {
+    position: fixed; pointer-events: none; background: var(--text-primary); color: var(--surface-1);
+    font-size: 12px; padding: 6px 9px; border-radius: 6px; transform: translate(-50%, -115%);
+    white-space: nowrap; opacity: 0; transition: opacity 0.08s ease; z-index: 50;
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    text-align: right; color: var(--text-muted); font-weight: 500; font-size: 12px;
+    padding: 8px 10px; border-bottom: 1px solid var(--gridline); cursor: pointer; white-space: nowrap;
+  }
+  thead th:first-child, thead th.left { text-align: left; }
+  thead th.sorted::after { content: " \25BE"; }
+  tbody td { padding: 8px 10px; border-bottom: 1px solid var(--gridline); text-align: right; font-variant-numeric: tabular-nums; }
+  tbody td:first-child, tbody td.left { text-align: left; font-variant-numeric: normal; }
+  tbody tr:last-child td { border-bottom: none; }
+  .pos { color: var(--good); }
+  .neg { color: var(--bad); }
+  .table-scroll { overflow-x: auto; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .pill.call { background: color-mix(in srgb, var(--series-1) 18%, transparent); color: var(--series-1); }
+  .pill.put { background: color-mix(in srgb, var(--series-7) 18%, transparent); color: var(--series-7); }
+
+  footer.note { color: var(--text-muted); font-size: 12px; margin-top: 30px; line-height: 1.5; }
+  @media (max-width: 560px) {
+    .bridge-row { grid-template-columns: 100px 1fr 70px; }
+    .kpi .value { font-size: 18px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Investment Tracker</h1>
+    <div class="meta" id="metaLine">Loading…</div>
+  </header>
+
+  <nav class="tabs">
+    <button data-tab="holdings" class="active">Holdings</button>
+    <button data-tab="performance">Performance</button>
+    <button data-tab="income">Income &amp; Fees</button>
+    <button data-tab="options">Past Options</button>
+  </nav>
+
+  <section class="panel active" id="panel-holdings"></section>
+  <section class="panel" id="panel-performance"></section>
+  <section class="panel" id="panel-income"></section>
+  <section class="panel" id="panel-options"></section>
+
+  <footer class="note">
+    Figures are sourced from IBKR activity statement exports and are for personal tracking only — not financial advice.
+    Drop a new <code>data.json</code> in this repo (regenerated from a fresh activity statement) to refresh these numbers.
+  </footer>
+</div>
+<div class="chart-tooltip" id="tooltip"></div>
+
+<script>
+const SERIES = ['--series-1','--series-2','--series-3','--series-4','--series-5','--series-6','--series-7','--series-8'];
+const fmt = (n, d=2) => n.toLocaleString(undefined, {minimumFractionDigits:d, maximumFractionDigits:d});
+const fmtMoney = (n, d=2) => (n<0?'-$':'$') + Math.abs(n).toLocaleString(undefined, {minimumFractionDigits:d, maximumFractionDigits:d});
+const fmtCompact = (n) => {
+  const abs = Math.abs(n);
+  if (abs >= 1e6) return (n/1e6).toFixed(2)+'M';
+  if (abs >= 1e3) return (n/1e3).toFixed(1)+'K';
+  return n.toFixed(0);
+};
+const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const tooltip = document.getElementById('tooltip');
+function showTip(evt, html) {
+  tooltip.innerHTML = html;
+  tooltip.style.left = evt.clientX + 'px';
+  tooltip.style.top = evt.clientY + 'px';
+  tooltip.style.opacity = 1;
+}
+function hideTip() { tooltip.style.opacity = 0; }
+
+function sortable(table, data, columns, renderRow) {
+  const thead = table.querySelector('thead');
+  let sortKey = columns[0].key, asc = false;
+  function draw() {
+    const rows = [...data].sort((a,b) => {
+      const av = a[sortKey], bv = b[sortKey];
+      const cmp = (typeof av === 'string') ? av.localeCompare(bv) : (av - bv);
+      return asc ? cmp : -cmp;
+    });
+    table.querySelector('tbody').innerHTML = rows.map(renderRow).join('');
+    thead.querySelectorAll('th').forEach(th => {
+      th.classList.toggle('sorted', th.dataset.key === sortKey);
+    });
+  }
+  thead.querySelectorAll('th').forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.key;
+      if (key === sortKey) asc = !asc; else { sortKey = key; asc = false; }
+      draw();
+    });
+  });
+  draw();
+}
+
+function kpiRow(items) {
+  return `<div class="kpi-row">${items.map(i => `
+    <div class="kpi">
+      <div class="label">${i.label}</div>
+      <div class="value ${i.cls||''}">${i.value}</div>
+      ${i.sub ? `<div class="sub">${i.sub}</div>` : ''}
+    </div>`).join('')}</div>`;
+}
+
+function renderHoldings(data) {
+  const el = document.getElementById('panel-holdings');
+  const holdings = [...data.holdings].sort((a,b) => b.value - a.value);
+  const totalValue = holdings.reduce((s,h) => s + h.value, 0);
+  const totalCost = holdings.reduce((s,h) => s + h.costBasis, 0);
+  const totalPL = holdings.reduce((s,h) => s + h.unrealizedPL, 0);
+
+  el.innerHTML = `
+    ${kpiRow([
+      {label:'Portfolio value', value: fmtMoney(totalValue,0)},
+      {label:'Cost basis', value: fmtMoney(totalCost,0)},
+      {label:'Unrealized P/L', value: fmtMoney(totalPL,0), cls: totalPL>=0?'good':'bad', sub: (totalPL>=0?'+':'') + (totalPL/totalCost*100).toFixed(1)+'% vs cost'},
+    ])}
+    <div class="card">
+      <h2>Allocation by value</h2>
+      <div class="card-sub">Current open positions, sized by market value</div>
+      <div class="alloc-bar" id="allocBar"></div>
+      <div class="alloc-legend" id="allocLegend"></div>
+    </div>
+    <div class="card">
+      <h2>Holdings detail</h2>
+      <div class="table-scroll">
+        <table id="holdingsTable">
+          <thead><tr>
+            <th class="left" data-key="symbol">Symbol</th>
+            <th data-key="quantity">Qty</th>
+            <th data-key="costPrice">Avg cost</th>
+            <th data-key="closePrice">Price</th>
+            <th data-key="costBasis">Cost basis</th>
+            <th data-key="value">Value</th>
+            <th data-key="unrealizedPL">Unrealized P/L</th>
+            <th data-key="pct">% of book</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>`;
+
+  const bar = document.getElementById('allocBar');
+  const legend = document.getElementById('allocLegend');
+  holdings.forEach((h, i) => {
+    const pct = h.value / totalValue * 100;
+    const color = `var(${SERIES[i % SERIES.length]})`;
+    const seg = document.createElement('div');
+    seg.className = 'alloc-seg';
+    seg.style.width = pct + '%';
+    seg.style.background = color;
+    seg.style.marginRight = i < holdings.length-1 ? '2px' : '0';
+    seg.addEventListener('mousemove', (e) => showTip(e, `<b>${h.symbol}</b><br>${fmtMoney(h.value,0)} · ${pct.toFixed(1)}%`));
+    seg.addEventListener('mouseleave', hideTip);
+    bar.appendChild(seg);
+
+    const item = document.createElement('div');
+    item.className = 'legend-item';
+    item.innerHTML = `<span class="legend-dot" style="background:${color}"></span>${h.symbol} · ${pct.toFixed(1)}%`;
+    legend.appendChild(item);
+  });
+
+  const rows = holdings.map(h => ({...h, pct: h.value/totalValue*100}));
+  sortable(document.getElementById('holdingsTable'), rows,
+    [{key:'symbol'}],
+    (h) => `<tr>
+      <td class="left"><b>${h.symbol}</b></td>
+      <td>${fmt(h.quantity)}</td>
+      <td>${fmtMoney(h.costPrice)}</td>
+      <td>${fmtMoney(h.closePrice)}</td>
+      <td>${fmtMoney(h.costBasis,0)}</td>
+      <td>${fmtMoney(h.value,0)}</td>
+      <td class="${h.unrealizedPL>=0?'pos':'neg'}">${fmtMoney(h.unrealizedPL,0)}</td>
+      <td>${h.pct.toFixed(1)}%</td>
+    </tr>`);
+}
+
+function renderPerformance(data) {
+  const el = document.getElementById('panel-performance');
+  const b = data.nav.bridge;
+  const netDeposits = b['Deposits & Withdrawals'] || 0;
+  const ending = b['Ending Value'] || data.nav.current || 0;
+  const totalGain = ending - netDeposits;
+  const twr = data.nav.timeWeightedReturn;
+
+  const bridgeRowsDef = [
+    {label:'Net deposits', key:'Deposits & Withdrawals'},
+    {label:'Mark-to-market', key:'Mark-to-Market'},
+    {label:'Dividends', key:'Dividends'},
+    {label:'Withholding tax', key:'Withholding Tax'},
+    {label:'Interest', key:'Interest'},
+    {label:'Fees & commissions', custom: (b['Other Fees']||0) + (b['Commissions']||0) + (b['Sales Tax']||0)},
+  ];
+  const maxAbs = Math.max(...bridgeRowsDef.map(r => Math.abs(r.custom !== undefined ? r.custom : (b[r.key]||0))), 1);
+
+  el.innerHTML = `
+    ${kpiRow([
+      {label:'Current value', value: fmtMoney(ending,0)},
+      {label:'Net deposited', value: fmtMoney(netDeposits,0), sub:'USD-equivalent, base currency'},
+      {label:'Total gain', value: fmtMoney(totalGain,0), cls: totalGain>=0?'good':'bad', sub: (totalGain/netDeposits*100).toFixed(1)+'% on deposited capital'},
+      {label:'Time-weighted return', value: twr || '—'},
+    ])}
+    <div class="card">
+      <h2>NAV bridge</h2>
+      <div class="card-sub">What moved the account from $0 to its current value this statement period</div>
+      <div id="bridgeRows"></div>
+    </div>
+    <div class="card">
+      <h2>Net deposits over time</h2>
+      <div class="card-sub">Cumulative money moved into the account (SGD wires)</div>
+      <div id="depositChart"></div>
+    </div>`;
+
+  const bridgeHost = document.getElementById('bridgeRows');
+  bridgeRowsDef.forEach(r => {
+    const val = r.custom !== undefined ? r.custom : (b[r.key]||0);
+    const pct = Math.abs(val) / maxAbs * 50;
+    const positive = val >= 0;
+    const color = positive ? 'var(--div-pos)' : 'var(--div-neg)';
+    const row = document.createElement('div');
+    row.className = 'bridge-row';
+    row.innerHTML = `
+      <div class="bridge-label">${r.label}</div>
+      <div class="bridge-track">
+        <div class="bridge-mid"></div>
+        <div class="bridge-fill" style="background:${color}; width:${pct}%; left:${positive ? '50%' : (50-pct)+'%'}"></div>
+      </div>
+      <div class="bridge-value ${positive?'pos':'neg'}">${fmtMoney(val,0)}</div>`;
+    bridgeHost.appendChild(row);
+  });
+
+  // Cumulative deposit line chart
+  const flows = [...data.cashFlows].sort((a,b) => a.date.localeCompare(b.date));
+  let running = 0;
+  const points = flows.map(c => { running += c.amount; return {date: c.date, running, delta: c.amount, desc: c.description}; });
+  document.getElementById('depositChart').innerHTML = points.length ? lineChart(points) : '<p style="color:var(--text-muted);font-size:13px">No cash flow data.</p>';
+}
+
+function lineChart(points) {
+  const w = 900, h = 220, padL = 50, padR = 10, padT = 10, padB = 26;
+  const xs = points.map((_,i) => i);
+  const ys = points.map(p => p.running);
+  const minY = Math.min(0, ...ys), maxY = Math.max(...ys) * 1.08;
+  const x = (i) => padL + (i / Math.max(points.length-1,1)) * (w - padL - padR);
+  const y = (v) => h - padB - ((v - minY) / (maxY - minY || 1)) * (h - padT - padB);
+
+  const linePath = points.map((p,i) => `${i===0?'M':'L'}${x(i).toFixed(1)},${y(p.running).toFixed(1)}`).join(' ');
+  const areaPath = `${linePath} L${x(points.length-1).toFixed(1)},${y(minY).toFixed(1)} L${x(0).toFixed(1)},${y(minY).toFixed(1)} Z`;
+
+  const gridLines = [0,0.25,0.5,0.75,1].map(t => {
+    const val = minY + t*(maxY-minY);
+    const yy = y(val);
+    return `<line x1="${padL}" x2="${w-padR}" y1="${yy}" y2="${yy}" stroke="var(--gridline)" stroke-width="1"/>
+            <text x="${padL-8}" y="${yy+4}" text-anchor="end" font-size="11" fill="var(--text-muted)">${fmtCompact(val)}</text>`;
+  }).join('');
+
+  const dots = points.map((p,i) => `
+    <circle cx="${x(i)}" cy="${y(p.running)}" r="4" fill="var(--series-1)" stroke="var(--surface-1)" stroke-width="2"
+      data-i="${i}" class="dot"/>`).join('');
+
+  const svgId = 'svg-' + Math.random().toString(36).slice(2);
+  const html = `<svg class="chart" id="${svgId}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">
+    ${gridLines}
+    <path d="${areaPath}" fill="var(--series-1)" opacity="0.1" stroke="none"/>
+    <path d="${linePath}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    ${dots}
+  </svg>`;
+
+  requestAnimationFrame(() => {
+    const svg = document.getElementById(svgId);
+    if (!svg) return;
+    svg.querySelectorAll('.dot').forEach(dot => {
+      const p = points[+dot.dataset.i];
+      dot.addEventListener('mousemove', (e) => showTip(e, `<b>${p.date}</b><br>${p.desc}<br>${p.delta>=0?'+':''}${fmtMoney(p.delta,0)} (running ${fmtMoney(p.running,0)})`));
+      dot.addEventListener('mouseleave', hideTip);
+    });
+  });
+  return html;
+}
+
+function renderIncome(data) {
+  const el = document.getElementById('panel-income');
+  const s = data.incomeSummary;
+  const totalDiv = Object.values(s.dividendsByCurrency||{}).reduce((a,b)=>a+b,0);
+  const totalTax = Object.values(s.withholdingTaxByCurrency||{}).reduce((a,b)=>a+b,0);
+  const cf = data.cashFlowSummary;
+
+  el.innerHTML = `
+    ${kpiRow([
+      {label:'Dividends received', value: fmtMoney(totalDiv,0), sub:'USD'},
+      {label:'Withholding tax', value: fmtMoney(totalTax,0), sub:'US tax on dividends'},
+      {label:'Deposits', value: fmtMoney(cf.deposits,0), sub:'SGD'},
+      {label:'Withdrawals', value: fmtMoney(cf.withdrawals,0), sub:'SGD'},
+    ])}
+    <div class="card">
+      <h2>Dividends</h2>
+      <div class="table-scroll"><table id="divTable">
+        <thead><tr><th class="left" data-key="date">Date</th><th class="left" data-key="description">Description</th><th data-key="amount">Amount</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <h2>Deposits &amp; withdrawals</h2>
+      <div class="table-scroll"><table id="cfTable">
+        <thead><tr><th class="left" data-key="date">Date</th><th class="left" data-key="description">Description</th><th data-key="amount">Amount (SGD)</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <h2>Interest &amp; fees</h2>
+      <div class="table-scroll"><table id="feeTable">
+        <thead><tr><th class="left" data-key="date">Date</th><th class="left" data-key="type">Type</th><th class="left" data-key="description">Description</th><th data-key="amount">Amount</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>`;
+
+  sortable(document.getElementById('divTable'), data.dividends, [{key:'date'}],
+    (r) => `<tr><td class="left">${r.date}</td><td class="left">${r.description}</td><td class="${r.amount>=0?'pos':'neg'}">${fmtMoney(r.amount)}</td></tr>`);
+
+  sortable(document.getElementById('cfTable'), data.cashFlows, [{key:'date'}],
+    (r) => `<tr><td class="left">${r.date}</td><td class="left">${r.description}</td><td class="${r.amount>=0?'pos':'neg'}">${fmtMoney(r.amount,2)}</td></tr>`);
+
+  const combined = [
+    ...data.interest.map(r => ({...r, type:'Interest'})),
+    ...data.fees.map(r => ({...r, type: r.subtitle || 'Fee'})),
+  ];
+  sortable(document.getElementById('feeTable'), combined, [{key:'date'}],
+    (r) => `<tr><td class="left">${r.date}</td><td class="left">${r.type}</td><td class="left">${r.description}</td><td class="${r.amount>=0?'pos':'neg'}">${fmtMoney(r.amount)} ${r.currency}</td></tr>`);
+}
+
+function renderOptions(data) {
+  const el = document.getElementById('panel-options');
+  const s = data.optionsSummary;
+  const winRate = s.totalTrades ? (s.wins / s.totalTrades * 100) : 0;
+
+  el.innerHTML = `
+    ${kpiRow([
+      {label:'Round trips', value: s.totalTrades},
+      {label:'Win rate', value: winRate.toFixed(0)+'%', sub: `${s.wins}W / ${s.losses}L / ${s.flat} flat`},
+      {label:'Realized P/L', value: fmtMoney(s.totalRealizedPL,0), cls: s.totalRealizedPL>=0?'good':'bad', sub:'net of commissions'},
+      {label:'Commissions paid', value: fmtMoney(Math.abs(s.totalCommissions),0)},
+    ])}
+    <div class="card">
+      <h2>Past Options</h2>
+      <div class="card-sub">Closed options round trips — all positions here have since been closed; current holdings are equity ETFs only (see Holdings tab)</div>
+      <div class="table-scroll">
+        <table id="optTable">
+          <thead><tr>
+            <th class="left" data-key="underlying">Underlying</th>
+            <th class="left" data-key="optionType">Type</th>
+            <th data-key="strike">Strike</th>
+            <th class="left" data-key="expiry">Expiry</th>
+            <th class="left" data-key="direction">Direction</th>
+            <th data-key="contracts">Contracts</th>
+            <th class="left" data-key="openDate">Opened</th>
+            <th class="left" data-key="closeDate">Closed</th>
+            <th data-key="daysHeld">Days held</th>
+            <th data-key="realizedPL">Realized P/L</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>`;
+
+  sortable(document.getElementById('optTable'), data.pastOptions, [{key:'openDate'}],
+    (o) => `<tr>
+      <td class="left"><b>${o.underlying||''}</b></td>
+      <td class="left"><span class="pill ${o.optionType==='C'?'call':'put'}">${o.optionType==='C'?'Call':'Put'}</span></td>
+      <td>${o.strike!=null ? fmtMoney(o.strike,2) : '—'}</td>
+      <td class="left">${o.expiry||'—'}</td>
+      <td class="left">${o.direction}</td>
+      <td>${fmt(o.contracts,0)}</td>
+      <td class="left">${o.openDate||'—'}</td>
+      <td class="left">${o.closeDate||'—'}</td>
+      <td>${o.daysHeld!=null ? o.daysHeld : '—'}</td>
+      <td class="${o.realizedPL>=0?'pos':'neg'}">${fmtMoney(o.realizedPL)}</td>
+    </tr>`);
+}
+
+function setupTabs() {
+  document.querySelectorAll('nav.tabs button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('section.panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+    });
+  });
+}
+
+async function init() {
+  setupTabs();
+  try {
+    const res = await fetch('data.json', {cache: 'no-store'});
+    const data = await res.json();
+    document.getElementById('metaLine').textContent =
+      `Statement period: ${data.meta.period || '—'} · Last imported ${data.meta.lastImported || '—'}`;
+    renderHoldings(data);
+    renderPerformance(data);
+    renderIncome(data);
+    renderOptions(data);
+  } catch (e) {
+    document.getElementById('metaLine').textContent = 'Could not load data.json — ' + e.message;
+    console.error(e);
+  }
+}
+init();
+</script>
+</body>
+</html>
